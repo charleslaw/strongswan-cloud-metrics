@@ -10,6 +10,7 @@ Restart=on-failure
 RestartSec=10
 User=root
 StateDirectory=strongswan-cloud-metrics
+EnvironmentFile=-/etc/strongswan-cloud-metrics/env
 
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,6 @@
 import logging
 import socket
+import subprocess
 import time
 
 import vici
@@ -30,6 +31,10 @@ POLL_INTERVAL = 60
 # Will move to config once config management is added.
 IGNORE = ["vpntest"]
 IGNORE_CHILD_SA_SUFFIXES = ["-path-monitor"]
+# Set REINIT=True to automatically attempt swanctl --initiate on missing child SAs.
+# Script must run as root (required for VICI access) so sudo is not needed.
+REINIT = False
+REINIT_TIMEOUT = 10
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -145,6 +150,17 @@ def check():
                     logger.error("Missing tunnel: %s %s%s", ike_key, child_sa, " (ignored)" if ignored else "")
                     if not ignored:
                         is_ok = False
+                    if REINIT and not ignored:
+                        logger.info("Attempting to reinitiate child SA: %s", child_sa)
+                        try:
+                            subprocess.run(
+                                ["swanctl", "--initiate", "--child", child_sa],
+                                timeout=REINIT_TIMEOUT,
+                                capture_output=True,
+                                check=False,
+                            )
+                        except Exception as exc:
+                            logger.error("Reinitiate failed for %s: %s", child_sa, exc)
 
         if errored_conns:
             is_ok = False
