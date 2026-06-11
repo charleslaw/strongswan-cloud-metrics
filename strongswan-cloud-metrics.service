@@ -1,0 +1,15 @@
+[Unit]
+Description=strongSwan Cloud Metrics Monitor
+After=network.target strongswan.service
+Wants=strongswan.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/strongswan-cloud-metrics
+Restart=on-failure
+RestartSec=10
+User=root
+StateDirectory=strongswan-cloud-metrics
+
+[Install]
+WantedBy=multi-user.target

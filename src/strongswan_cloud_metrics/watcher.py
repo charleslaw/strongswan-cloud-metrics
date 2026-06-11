@@ -1,13 +1,11 @@
-from datetime import datetime
 import logging
 import socket
 import time
 
-
 import vici
 
-
 DEFAULT_SOCKET = "/var/run/charon.vici"
+POLL_INTERVAL = 60
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -17,7 +15,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
-def main():
+def check():
     with socket.socket(socket.AF_UNIX) as s:
         try:
             s.connect(DEFAULT_SOCKET)
@@ -87,9 +85,15 @@ def main():
             logger.info("No VPN Errors Detected")
 
 
+def main():
+    while True:
+        try:
+            check()
+        except Exception:
+            logger.error("Check failed")
+            logger.exception("Traceback:")
+        time.sleep(POLL_INTERVAL)
+
+
 if __name__ == "__main__":
-    try:
-        main()
-    except:
-        logger.error("Failed to run monitor")
-        logger.exception("Traceback:")
+    main()

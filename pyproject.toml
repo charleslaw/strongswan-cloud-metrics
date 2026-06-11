@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "strongswan-cloud-metrics"
+version = "0.1.0"
+description = "Monitor strongSwan VPN connections and emit metrics/logs for CloudWatch"
+requires-python = ">=3.9"
+dependencies = [
+    "vici==5.9.11.post1",
+]
+
+[project.scripts]
+strongswan-cloud-metrics = "strongswan_cloud_metrics.watcher:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/strongswan_cloud_metrics"]
