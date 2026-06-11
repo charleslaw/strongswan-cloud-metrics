@@ -71,6 +71,16 @@ STRONGSWAN_SERVICE_REINIT_WINDOW=07:00-08:00
 # Minimum seconds between service restarts
 # Set to 0 to disable (restart every cycle if VPN errors are detected)
 STRONGSWAN_SERVICE_REINIT_COOLDOWN=3600
+
+# Path to write logs to a file in addition to the journal (for CloudWatch agent tailing).
+# Leave unset or empty to log to the journal only.
+STRONGSWAN_LOG_FILE=/var/log/vpn/strongswan-cloud-metrics.log
+```
+
+**Note:** If you set `STRONGSWAN_LOG_FILE`, create the log file before restarting — the daemon will not create it automatically:
+
+```sh
+sudo mkdir -p /var/log/vpn && sudo touch /var/log/vpn/strongswan-cloud-metrics.log
 ```
 
 **Tip: limiting restarts to once per day** — set `STRONGSWAN_SERVICE_REINIT_WINDOW` to a short daily window and `STRONGSWAN_SERVICE_REINIT_COOLDOWN` to a value larger than the window duration. For example, a window of `07:00-08:00` (3600 seconds wide) with a cooldown of `7200` seconds means at most one service restart per day, even if the daemon keeps seeing VPN errors.
@@ -95,10 +105,9 @@ sudo systemctl restart strongswan-cloud-metrics
 
 3. **Attach the IAM policy** — add `CloudWatchAgentServerPolicy` to the IAM role attached to the instance.
 
-4. **Enable log file output** — create the log file, uncomment the `StandardOutput`/`StandardError` lines in the service file, then reload and restart:
+4. **Enable log file output** — set `STRONGSWAN_LOG_FILE=/var/log/vpn/strongswan-cloud-metrics.log` in `/etc/strongswan-cloud-metrics/env`, then create the log file and restart:
    ```sh
    sudo mkdir -p /var/log/vpn && sudo touch /var/log/vpn/strongswan-cloud-metrics.log
-   sudo systemctl daemon-reload
    sudo systemctl restart strongswan-cloud-metrics
    ```
 
@@ -135,6 +144,22 @@ sudo systemctl restart strongswan-cloud-metrics
      -c file:/etc/amazon/amazon-cloudwatch-agent/amazon-cloudwatch-agent.d/file_config.json
    ```
 
+7. **Create a metric filter** — open the log group in the CloudWatch console and create a metric filter:
+   - Set the filter pattern to `%VPN OK|VPN ERROR|WATCHER ERROR%` (temporarily includes `VPN OK` so the metric is seeded — see step 8)
+   - Specify (or create) a namespace, and specify a metric name (on the 2nd part of the console wizard)
+   - Set metric value to `1`, default value to `0`, and unit to `Count`
+
+8. **Seed the metric** — go to All Metrics and confirm the metric appears (it won't show until at least one matching log line has been ingested; `VPN OK` is emitted every 60 seconds so it should appear within a minute or two). Once the metric is visible, go back to the metric filter and update the pattern to remove `VPN OK`:
+   ```
+   %VPN ERROR|WATCHER ERROR%
+   ```
+
+9. **Create an alarm** — select the metric and create a CloudWatch alarm:
+   - Set the threshold to `>= 1`
+   - Require at least **2 datapoints out of N** before entering ALARM state — periodic service refreshes can produce transient errors that resolve on the next poll, so requiring 2 consecutive errors avoids false alerts
+   - Add an SNS notification for the **ALARM** state
+   - Also add a notification for the **OK** state — this is recommended for the same reason: since transient errors can trigger the alarm, knowing when it clears is important for assessing whether action is needed
+
 ## Logs
 
 ```sh
@@ -143,4 +168,4 @@ journalctl -u strongswan-cloud-metrics -f
 
 ## How it works
 
-The daemon connects to strongSwan's VICI socket every 60 seconds, compares configured connections against active security associations, and logs the results. Alerting is done downstream — configure CloudWatch Metric Filters on the log group to turn log patterns (e.g. "VPN Error Detected") into metrics and alarms.
+The daemon connects to strongSwan's VICI socket every 60 seconds, compares configured connections against active security associations, and logs the results. Alerting is done downstream — configure CloudWatch Metric Filters on the log group to turn log patterns into metrics and alarms (see AWS Setup step 7).

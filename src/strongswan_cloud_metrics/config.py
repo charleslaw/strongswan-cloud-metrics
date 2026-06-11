@@ -26,6 +26,9 @@ SERVICE_REINIT_WINDOW = os.environ.get("STRONGSWAN_SERVICE_REINIT_WINDOW", "")
 # Minimum seconds between service restarts.
 SERVICE_REINIT_COOLDOWN = int(os.environ.get("STRONGSWAN_SERVICE_REINIT_COOLDOWN", "0"))
 
+# Optional path to write logs to a file in addition to stderr (for CloudWatch tailing).
+LOG_FILE = os.environ.get("STRONGSWAN_LOG_FILE", "")
+
 # systemd sets STATE_DIRECTORY to the full path when StateDirectory= is configured.
 STATE_DIR = os.environ.get("STATE_DIRECTORY", "/var/lib/strongswan-cloud-metrics").split()[0]
 # SQLite database storing intervention history (reinit timestamps, etc.).

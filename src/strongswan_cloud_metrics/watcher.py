@@ -23,12 +23,11 @@ logger.addHandler(ch)
 
 
 def check():
-    logger.info("Starting check at %s", time.strftime("%Y-%m-%d %H:%M:%S"))
     with socket.socket(socket.AF_UNIX) as s:
         try:
             s.connect(config.DEFAULT_SOCKET)
         except Exception as exc:
-            logger.error("Connection to VICI Socket Failed: %s", exc)
+            logger.error("WATCHER ERROR: Connection to VICI Socket Failed: %s", exc)
             raise
 
         session = vici.Session(s)
@@ -116,13 +115,9 @@ def check():
                     logger.error("Reinitiate failed for %s: %s", child_sa, exc)
 
     if result["is_ok"]:
-        logger.info("No VPN Errors Detected")
-        # TODO: Remove this line
-        logger.info("Everything is ok.")
+        logger.info("VPN OK")
     else:
-        logger.error("VPN Error Detected")
-        # TODO: Remove this line
-        logger.error("Everything is NOT ok")
+        logger.error("VPN ERROR")
         if not in_reinit_window(config.SERVICE_REINIT_WINDOW):
             logger.info(
                 "Service restart skipped (outside window %s)",
@@ -151,12 +146,16 @@ def check():
 
 
 def main():
+    if config.LOG_FILE:
+        fh = logging.FileHandler(config.LOG_FILE)
+        fh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+        logger.addHandler(fh)
     db.init_db()
     while True:
         try:
             check()
         except Exception:
-            logger.error("Check failed")
+            logger.error("WATCHER ERROR: Check failed")
             logger.exception("Traceback:")
         time.sleep(config.POLL_INTERVAL)
 
