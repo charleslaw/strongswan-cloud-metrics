@@ -15,22 +15,53 @@ Note that this requires root permissions to connect to the VICI socket (`/var/ru
 
 ## Installation
 
-Requires [uv](https://docs.astral.sh/uv/getting-started/installation/). Please refer to the official installation instructions there; typically it follows a command like:
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/). Please refer to the official installation instructions there; typically it follows a command like (install systemwide):
 
 ```sh
-curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sudo -E sh
 ```
 
 Install the package and deploy the systemd service:
 
 ```sh
-sudo uv tool install strongswan-cloud-metrics
+sudo UV_TOOL_BIN_DIR=/usr/local/bin uv tool install .
 sudo cp strongswan-cloud-metrics.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now strongswan-cloud-metrics
 ```
 
-Check logs:
+## Configuration
+
+Configuration is read from `/etc/strongswan-cloud-metrics/env`. Create it if it doesn't exist:
+
+```sh
+sudo mkdir -p /etc/strongswan-cloud-metrics
+sudo nano /etc/strongswan-cloud-metrics/env
+```
+
+Available settings:
+
+```sh
+# Comma-separated IKE connection names to exclude from error reporting
+STRONGSWAN_IGNORE=vpntest
+
+# Comma-separated IKE connection names to exclude from error reporting
+STRONGSWAN_IGNORE_CHILD_SA_SUFFIXES=-path-monitor
+
+# Set to 1 to automatically reinitiate missing child SAs via swanctl
+STRONGSWAN_REINIT=0
+
+# Timeout in seconds for swanctl reinitiate calls
+STRONGSWAN_REINIT_TIMEOUT=10
+```
+
+After editing, restart the service to pick up changes:
+
+```sh
+sudo systemctl restart strongswan-cloud-metrics
+```
+
+## Logs
 
 ```sh
 journalctl -u strongswan-cloud-metrics -f

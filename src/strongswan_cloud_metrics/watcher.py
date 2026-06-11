@@ -1,4 +1,5 @@
 import logging
+import os
 import socket
 import subprocess
 import time
@@ -28,13 +29,14 @@ def bytes2human(n):
 DEFAULT_SOCKET = "/var/run/charon.vici"
 POLL_INTERVAL = 60
 # Connections to exclude from error reporting (e.g. test connections, known-down links).
-# Will move to config once config management is added.
-IGNORE = ["vpntest"]
-IGNORE_CHILD_SA_SUFFIXES = ["-path-monitor"]
+# Comma-separated names to exclude from error reporting.
+# e.g. STRONGSWAN_IGNORE="vpntest,mayoclinic"
+IGNORE = [c.strip() for c in os.environ.get("STRONGSWAN_IGNORE", "vpntest").split(",") if c.strip()]
+IGNORE_CHILD_SA_SUFFIXES = [c.strip() for c in os.environ.get("STRONGSWAN_IGNORE_CHILD_SA_SUFFIXES", "-path-monitor").split(",") if c.strip()]
 # Set REINIT=True to automatically attempt swanctl --initiate on missing child SAs.
 # Script must run as root (required for VICI access) so sudo is not needed.
-REINIT = False
-REINIT_TIMEOUT = 10
+REINIT = os.environ.get("STRONGSWAN_REINIT", "0") == "1"
+REINIT_TIMEOUT = int(os.environ.get("STRONGSWAN_REINIT_TIMEOUT", "10"))
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
