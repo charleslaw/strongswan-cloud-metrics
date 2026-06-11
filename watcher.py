@@ -72,7 +72,7 @@ def main():
 
         # Simple logs
         logger.info("Configured connections (total): %s", len(conn_keys_config))
-        active_conns_config = set(conn_keys_config).intersect(set(conn_keys_active))
+        active_conns_config = set(conn_keys_config).intersection(set(conn_keys_active))
         logger.info("Configured connections (active): %s", len(active_conns_config))
         missing_keys = set(conn_keys_config) - set(conn_keys_active)
         logger.info("Configured connections (missing): %s", len(missing_keys))
@@ -82,7 +82,7 @@ def main():
         logger.info("Connections connecting: %s", len(conn_connecting))
         if error:
             # Trigger alerts on this
-            logger.erro("VPN Error Detected")
+            logger.error("VPN Error Detected")
         else:
             logger.info("No VPN Errors Detected")
 
