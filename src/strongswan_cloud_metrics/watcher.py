@@ -15,14 +15,15 @@ from .analysis import (
     _read_time,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.rpartition(".")[2] or __name__)
 logger.setLevel(logging.INFO)
 ch = logging.StreamHandler()
-ch.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+ch.setFormatter(logging.Formatter("%(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(ch)
 
 
 def check():
+    logger.info("Starting check at %s", time.strftime("%Y-%m-%d %H:%M:%S"))
     with socket.socket(socket.AF_UNIX) as s:
         try:
             s.connect(config.DEFAULT_SOCKET)
