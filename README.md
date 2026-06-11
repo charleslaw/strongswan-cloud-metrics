@@ -1,5 +1,9 @@
 # strongswan-cloud-metrics
 
+[![CI](https://github.com/charleslaw/strongswan-cloud-metrics/actions/workflows/ci.yml/badge.svg)](https://github.com/charleslaw/strongswan-cloud-metrics/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+
 A daemon that monitors strongSwan VPN connections and emits structured logs for ingestion by CloudWatch (or similar monitoring services).
 
 Note that this requires root permissions to connect to the VICI socket (`/var/run/charon.vici`).
