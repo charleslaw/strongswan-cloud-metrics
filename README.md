@@ -8,14 +8,15 @@ A daemon that monitors strongSwan VPN connections and emits structured logs for 
 
 Note that this requires root permissions to connect to the VICI socket (`/var/run/charon.vici`).
 
-## Plan
+## Roadmap
 
-* Build something that can detect issues even if it's not that polished
-* Work on outputting metrics that can go into cloudwatch
-* Make it installable and make it easy to deploy
-* Add CI, tests, formatting, etc.
-* Make the output metrics work with monitoring services from other clouds and Prometheus or similar tools
-* Active intervention mode: detect problems and attempt remediation (e.g. restart connections), with history persisted to SQLite
+- [x] Build something that can detect issues even if it's not that polished
+- [x] Output metrics into cloudwatch as logs
+- [x] Make it installable and easy to deploy
+- [x] Add CI, tests, formatting, etc.
+- [ ] Make the output metrics output to cloudwatch metrics directly for better information
+- [ ] Make the output metrics work with monitoring services from other clouds and Prometheus or similar tools
+- [x] Active intervention mode: detect problems and attempt remediation (e.g. restart connections), with history persisted to SQLite
 
 ## Installation
 
@@ -79,6 +80,60 @@ After editing, restart the service to pick up changes:
 ```sh
 sudo systemctl restart strongswan-cloud-metrics
 ```
+
+## AWS Setup
+
+### Capturing logs in CloudWatch
+
+1. **Create a log group** — in the CloudWatch console under Log Management, create a log group (e.g. `VPN_WATCHER_LOGS`).
+
+2. **Install the CloudWatch agent** on the instance:
+   ```sh
+   wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+   sudo dpkg -i amazon-cloudwatch-agent.deb
+   ```
+
+3. **Attach the IAM policy** — add `CloudWatchAgentServerPolicy` to the IAM role attached to the instance.
+
+4. **Enable log file output** — create the log file, uncomment the `StandardOutput`/`StandardError` lines in the service file, then reload and restart:
+   ```sh
+   sudo mkdir -p /var/log/vpn && sudo touch /var/log/vpn/strongswan-cloud-metrics.log
+   sudo systemctl daemon-reload
+   sudo systemctl restart strongswan-cloud-metrics
+   ```
+
+5. **Set up log rotation** — create `/etc/logrotate.d/strongswan-cloud-metrics`:
+   ```
+   /var/log/vpn/strongswan-cloud-metrics.log {
+       daily
+       rotate 7
+       compress
+       missingok
+       notifempty
+       copytruncate
+   }
+   ```
+   Verify the config is valid:
+   ```sh
+   sudo logrotate --debug /etc/logrotate.d/strongswan-cloud-metrics
+   ```
+
+6. **Configure the CloudWatch agent** — add the log file to your agent config (typically `/etc/amazon/amazon-cloudwatch-agent/amazon-cloudwatch-agent.d/file_config.json`) under `logs.logs_collected.files.collect_list`:
+   ```json
+   {
+       "file_path": "/var/log/vpn/strongswan-cloud-metrics.log",
+       "log_group_name": "VPN_WATCHER_LOGS",
+       "log_stream_name": "{instance_id}",
+       "log_group_class": "STANDARD",
+       "retention_in_days": -1
+   }
+   ```
+   Then load the config:
+   ```sh
+   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+     -a fetch-config -m ec2 -s \
+     -c file:/etc/amazon/amazon-cloudwatch-agent/amazon-cloudwatch-agent.d/file_config.json
+   ```
 
 ## Logs
 

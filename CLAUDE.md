@@ -23,6 +23,8 @@ pyproject.toml
 
 ## Installation
 
+> For server deployment. For local development, see the Development section below.
+
 Requires a Linux host running strongSwan — connects to `/var/run/charon.vici` (requires root).
 
 ```sh
@@ -36,6 +38,24 @@ sudo systemctl enable --now strongswan-cloud-metrics
 ```
 
 There are currently no tests, linting, or CI — adding them is on the README roadmap.
+
+## Development
+
+```sh
+# Install with dev dependencies
+uv sync --extra dev
+
+# Format
+uv run ruff format .
+
+# Lint
+uv run ruff check .
+
+# Type check (not yet configured)
+
+# Test
+uv run pytest
+```
 
 ## How watcher.py works
 

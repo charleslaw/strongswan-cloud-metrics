@@ -11,6 +11,11 @@ RestartSec=10
 User=root
 StateDirectory=strongswan-cloud-metrics
 EnvironmentFile=-/etc/strongswan-cloud-metrics/env
+# Uncomment to write logs to a file instead of the journal (for CloudWatch agent tailing).
+# Requires: sudo mkdir -p /var/log/vpn && sudo touch /var/log/vpn/strongswan-cloud-metrics.log
+# Then: sudo systemctl daemon-reload && sudo systemctl restart strongswan-cloud-metrics
+#StandardOutput=append:/var/log/vpn/strongswan-cloud-metrics.log
+#StandardError=append:/var/log/vpn/strongswan-cloud-metrics.log
 
 [Install]
 WantedBy=multi-user.target
