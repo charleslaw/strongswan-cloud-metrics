@@ -6,6 +6,10 @@ import vici
 
 DEFAULT_SOCKET = "/var/run/charon.vici"
 POLL_INTERVAL = 60
+# Connections to exclude from error reporting (e.g. test connections, known-down links).
+# Will move to config once config management is added.
+IGNORE = ["vpntest"]
+IGNORE_CHILD_SA_SUFFIXES = ["-path-monitor"]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -49,10 +53,12 @@ def check():
         active_conns = set(active_ike_map.keys())
         missing_conf_conns = possible_conns - active_conns
         active_conf_conns = active_conns - missing_conf_conns
+        errored_conns = missing_conf_conns - set(IGNORE)
 
         logger.info("Configured IKE connections (total): %s", len(possible_conns))
         logger.info("Configured IKE connections (active): %s", len(active_conf_conns))
         logger.info("Configured IKE connections (missing): %s", len(missing_conf_conns))
+        logger.info("Configured IKE connections (missing, not ignored): %s", len(errored_conns))
         logger.info("Active IKE connections (total): %s", len(active_conns))
         logger.info("Active IKE connections list: %s", ", ".join(sorted(active_conns)))
 
@@ -63,6 +69,13 @@ def check():
         for ike_key in conf_ike_map:
             established[ike_key] = {}
             for child_sa_key in conf_ike_map[ike_key]:
+                ignore_sa = False
+                for ignore_suffix in IGNORE_CHILD_SA_SUFFIXES:
+                    if child_sa_key.endswith(ignore_suffix):
+                        ignore_sa = True
+                        break
+                if ignore_sa:
+                    continue
                 established[ike_key][child_sa_key] = False
 
         for ike_blob in list_sas:
@@ -81,10 +94,12 @@ def check():
         for ike_key in established:
             for child_sa in established[ike_key]:
                 if not established[ike_key][child_sa]:
-                    logger.error("Missing tunnel: %s %s", ike_key, child_sa)
-                    is_ok = False
+                    ignored = ike_key in IGNORE
+                    logger.error("Missing tunnel: %s %s%s", ike_key, child_sa, " (ignored)" if ignored else "")
+                    if not ignored:
+                        is_ok = False
 
-        if missing_conf_conns:
+        if errored_conns:
             is_ok = False
 
         if is_ok:
