@@ -28,8 +28,7 @@ def last_reinit_ts(child_sa):
     try:
         with sqlite3.connect(config.DB_PATH) as conn:
             row = conn.execute(
-                "SELECT ts FROM interventions WHERE child_sa = ? "
-                "ORDER BY ts DESC LIMIT 1",
+                "SELECT ts FROM interventions WHERE child_sa = ? ORDER BY ts DESC LIMIT 1",
                 (child_sa,),
             ).fetchone()
         return row[0] if row else None
@@ -54,8 +53,7 @@ def last_service_restart_ts():
     try:
         with sqlite3.connect(config.DB_PATH) as conn:
             row = conn.execute(
-                "SELECT ts FROM interventions WHERE action = 'service_restart' "
-                "ORDER BY ts DESC LIMIT 1"
+                "SELECT ts FROM interventions WHERE action = 'service_restart' ORDER BY ts DESC LIMIT 1"
             ).fetchone()
         return row[0] if row else None
     except Exception as exc:

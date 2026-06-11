@@ -167,8 +167,13 @@ def t(h, m):
     return datetime.time(h, m)
 
 
-def test_window_empty_always_allowed():
-    assert _in_reinit_window("", now=t(3, 0)) is True
+def test_window_empty_disabled():
+    assert _in_reinit_window("", now=t(3, 0)) is False
+
+
+def test_window_all_day():
+    assert _in_reinit_window("00:00-00:00", now=t(3, 0)) is True
+    assert _in_reinit_window("00:00-00:00", now=t(23, 59)) is True
 
 
 def test_window_inside():

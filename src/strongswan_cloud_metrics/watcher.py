@@ -18,9 +18,7 @@ from .analysis import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 ch = logging.StreamHandler()
-ch.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
+ch.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(ch)
 
 
@@ -37,31 +35,21 @@ def check():
         conf_ike_map = {}
         for ike_cfg in session.list_conns():
             for ike_key in ike_cfg:
-                conf_ike_map[ike_key] = list(
-                    ike_cfg[ike_key].get("children", {}).keys()
-                )
+                conf_ike_map[ike_key] = list(ike_cfg[ike_key].get("children", {}).keys())
 
         list_sas = list(session.list_sas())
 
-    result = analyze(
-        conf_ike_map, list_sas, config.IGNORE, config.IGNORE_CHILD_SA_SUFFIXES
-    )
+    result = analyze(conf_ike_map, list_sas, config.IGNORE, config.IGNORE_CHILD_SA_SUFFIXES)
 
     logger.info("Configured IKE connections (total): %s", len(result["possible_conns"]))
-    logger.info(
-        "Configured IKE connections (active): %s", len(result["active_conf_conns"])
-    )
-    logger.info(
-        "Configured IKE connections (missing): %s", len(result["missing_conf_conns"])
-    )
+    logger.info("Configured IKE connections (active): %s", len(result["active_conf_conns"]))
+    logger.info("Configured IKE connections (missing): %s", len(result["missing_conf_conns"]))
     logger.info(
         "Configured IKE connections (missing, not ignored): %s",
         len(result["errored_conns"]),
     )
     logger.info("Active IKE connections (total): %s", len(result["active_conns"]))
-    logger.info(
-        "Active IKE connections list: %s", ", ".join(sorted(result["active_conns"]))
-    )
+    logger.info("Active IKE connections list: %s", ", ".join(sorted(result["active_conns"])))
 
     tref = int(time.time())
     for ike_blob in list_sas:

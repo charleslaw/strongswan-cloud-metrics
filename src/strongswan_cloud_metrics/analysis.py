@@ -32,13 +32,15 @@ def in_reinit_window(window_str, now=None):
     Handles windows that cross midnight, e.g. "23:00-01:00".
     """
     if not window_str:
-        return True
+        return False
     if now is None:
         now = datetime.datetime.utcnow().time()
     try:
         start_str, end_str = window_str.split("-", 1)
         start = datetime.datetime.strptime(start_str.strip(), "%H:%M").time()
         end = datetime.datetime.strptime(end_str.strip(), "%H:%M").time()
+        if start == end:
+            return True  # 00:00-00:00 means always
         if start <= end:
             return start <= now <= end
         # Window crosses midnight

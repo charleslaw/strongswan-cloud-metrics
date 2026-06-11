@@ -63,7 +63,8 @@ STRONGSWAN_CHILD_SA_REINIT_TIMEOUT=10
 STRONGSWAN_CHILD_SA_REINIT_COOLDOWN=3600
 
 # UTC time window during which automatic service restart is allowed (HH:MM-HH:MM)
-# Leave unset to allow restart at any time
+# Leave unset (or blank) to disable service restart entirely.
+# Use 00:00-00:00 to allow restart at any time.
 STRONGSWAN_SERVICE_REINIT_WINDOW=07:00-08:00
 
 # Minimum seconds between service restarts
