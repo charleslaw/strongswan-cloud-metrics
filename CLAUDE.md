@@ -13,7 +13,7 @@ An active intervention mode is also planned — the daemon will detect problems 
 ```
 src/strongswan_cloud_metrics/
     __init__.py
-    config.py       # all env var constants (IGNORE, REINIT_*, STATE_DIR, etc.)
+    config.py       # all env var constants (IGNORE, SERVICE_REINIT_*, STATE_DIR, etc.)
     db.py           # SQLite helpers (init_db, last_reinit_ts, record_reinit)
     analysis.py     # pure functions: analyze(), in_reinit_window(), cooldown_elapsed(), bytes2human()
     watcher.py      # daemon entry point: check(), main(), logging setup
@@ -22,6 +22,8 @@ pyproject.toml
 ```
 
 ## Installation
+
+> For server deployment. For local development, see the Development section below.
 
 Requires a Linux host running strongSwan — connects to `/var/run/charon.vici` (requires root).
 
@@ -36,6 +38,24 @@ sudo systemctl enable --now strongswan-cloud-metrics
 ```
 
 There are currently no tests, linting, or CI — adding them is on the README roadmap.
+
+## Development
+
+```sh
+# Install with dev dependencies
+uv sync --extra dev
+
+# Format
+uv run ruff format .
+
+# Lint
+uv run ruff check .
+
+# Type check (not yet configured)
+
+# Test
+uv run pytest
+```
 
 ## How watcher.py works
 
