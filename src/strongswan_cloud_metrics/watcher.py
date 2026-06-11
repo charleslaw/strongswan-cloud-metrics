@@ -4,6 +4,26 @@ import time
 
 import vici
 
+def _read_int(data, key):
+    return int(data.get(key, b"0").decode("utf-8"))
+
+
+def _read_time(data, key, tref, tdir=1):
+    delta = _read_int(data, key)
+    if tdir < 0:
+        delta = -delta
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(tref + delta)))
+
+
+def bytes2human(n):
+    symbols = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
+    prefix = {s: 1 << (i + 1) * 10 for i, s in enumerate(symbols[1:])}
+    for symbol in reversed(symbols[1:]):
+        if n >= prefix[symbol]:
+            return "%.1f%s" % (float(n) / prefix[symbol], symbol)
+    return "%.1fB" % n
+
+
 DEFAULT_SOCKET = "/var/run/charon.vici"
 POLL_INTERVAL = 60
 # Connections to exclude from error reporting (e.g. test connections, known-down links).
@@ -78,10 +98,25 @@ def check():
                     continue
                 established[ike_key][child_sa_key] = False
 
+        tref = int(time.time())
         for ike_blob in list_sas:
             for ike_key, ike_status in ike_blob.items():
                 if ike_status["state"] != b"ESTABLISHED":
                     continue
+
+                try:
+                    # v5.7 uses reauth-time instead of rekey-time
+                    if "rekey-time" not in ike_status and "reauth-time" in ike_status:
+                        ike_status["rekey-time"] = ike_status["reauth-time"]
+                    logger.debug(
+                        "IKE %s: established=%s rekey=%s",
+                        ike_key,
+                        _read_time(ike_status, "established", tref, tdir=-1),
+                        _read_time(ike_status, "rekey-time", tref, tdir=1),
+                    )
+                except Exception:
+                    pass
+
                 child_sas = ike_status.get("child-sas")
                 if child_sas:
                     for child_status in child_sas.values():
@@ -89,6 +124,18 @@ def check():
                         if child_key in established.get(ike_key, {}):
                             if child_status["state"] == b"INSTALLED":
                                 established[ike_key][child_key] = True
+                        try:
+                            logger.debug(
+                                "  child %s: in=%s out=%s installed=%s life=%s rekey=%s",
+                                child_key,
+                                bytes2human(_read_int(child_status, "bytes-in")),
+                                bytes2human(_read_int(child_status, "bytes-out")),
+                                _read_time(child_status, "install-time", tref, tdir=-1),
+                                _read_time(child_status, "life-time", tref, tdir=1),
+                                _read_time(child_status, "rekey-time", tref, tdir=1),
+                            )
+                        except Exception:
+                            pass
 
         is_ok = True
         for ike_key in established:
