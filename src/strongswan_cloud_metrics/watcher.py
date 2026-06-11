@@ -23,66 +23,76 @@ def check():
             logger.error("Connection to VICI Socket Failed: %s", exc)
             raise
 
-        vici_session = vici.Session(s)
+        session = vici.Session(s)
 
-        # https://github.com/strongswan/strongswan/blob/master/src/libcharon/plugins/vici/README.md#a-request-with-response-iteration
-        # TODO: Confirm if there is ever more than 1 key per connection. It
-        # looks a lot like each connection has a single key
-        # list_conns lists connections specified in the VPN configuration
-        conn_keys_config = []
-        for conn in vici_session.list_conns():
-            for key in conn:
-                conn_keys_config.append(key)
+        # IKE key -> list of expected child SA names (from config)
+        conf_ike_map = {}
+        for ike_cfg in session.list_conns():
+            for ike_key in ike_cfg:
+                conf_ike_map[ike_key] = list(ike_cfg[ike_key].get("children", {}).keys())
 
-        list_sas = list(vici_session.list_sas())
+        list_sas = list(session.list_sas())
 
-        error = False
+        # IKE key -> list of installed child SA names (from active state)
+        active_ike_map = {}
+        for ike_blob in list_sas:
+            for ike_key, ike_status in ike_blob.items():
+                child_sas = ike_status.get("child-sas", {})
+                if ike_key not in active_ike_map:
+                    active_ike_map[ike_key] = []
+                for child_sa_key in child_sas:
+                    if child_sas[child_sa_key].get("state") == b"INSTALLED":
+                        child_sa_name = child_sas[child_sa_key].get("name").decode("utf-8")
+                        active_ike_map[ike_key].append(child_sa_name)
 
-        # analyze data
-        conn_keys_active = []
-        conn_connecting = []
-        for conn in list_sas:
-            for key, sas_info in conn.items():
-                conn_keys_active.append(key)
+        possible_conns = set(conf_ike_map.keys())
+        active_conns = set(active_ike_map.keys())
+        missing_conf_conns = possible_conns - active_conns
+        active_conf_conns = active_conns - missing_conf_conns
 
-                # TODO: Get a more complete list of states
-                if sas_info.get("state") != b"ESTABLISHED":
-                    if sas_info.get("state") == b"CONNECTING":
-                        conn_connecting.append(key)
-                    else:
-                        error = True
-                        continue
+        logger.info("Configured IKE connections (total): %s", len(possible_conns))
+        logger.info("Configured IKE connections (active): %s", len(active_conf_conns))
+        logger.info("Configured IKE connections (missing): %s", len(missing_conf_conns))
+        logger.info("Active IKE connections (total): %s", len(active_conns))
+        logger.info("Active IKE connections list: %s", ", ".join(sorted(active_conns)))
 
-                # TODO: Find a way to see if a connection is resetting
-                # frequently and has a perpetually low established time
+        # For each configured child SA, start as not-established.
+        # There may be multiple SAs for the same IKE key (e.g. during rekeying);
+        # a connection is ok as long as at least one INSTALLED child SA per name exists.
+        established = {}
+        for ike_key in conf_ike_map:
+            established[ike_key] = {}
+            for child_sa_key in conf_ike_map[ike_key]:
+                established[ike_key][child_sa_key] = False
 
-                # Must exist and be non-empty
-                children = None
-                if sas_info.get("child-sas"):
-                    children = sas_info["child-sas"]
-
-                if not children:
-                    error = True
+        for ike_blob in list_sas:
+            for ike_key, ike_status in ike_blob.items():
+                if ike_status["state"] != b"ESTABLISHED":
                     continue
+                child_sas = ike_status.get("child-sas")
+                if child_sas:
+                    for child_status in child_sas.values():
+                        child_key = child_status["name"].decode("utf-8")
+                        if child_key in established.get(ike_key, {}):
+                            if child_status["state"] == b"INSTALLED":
+                                established[ike_key][child_key] = True
 
-        if conn_keys_config != conn_keys_active:
-            error = True
+        is_ok = True
+        for ike_key in established:
+            for child_sa in established[ike_key]:
+                if not established[ike_key][child_sa]:
+                    logger.error("Missing tunnel: %s %s", ike_key, child_sa)
+                    is_ok = False
 
-        # Simple logs
-        logger.info("Configured connections (total): %s", len(conn_keys_config))
-        active_conns_config = set(conn_keys_config).intersection(set(conn_keys_active))
-        logger.info("Configured connections (active): %s", len(active_conns_config))
-        missing_keys = set(conn_keys_config) - set(conn_keys_active)
-        logger.info("Configured connections (missing): %s", len(missing_keys))
-        logger.info("Active connections (total): %s", len(conn_keys_active))
-        logger.info("Active connections: %s", list(sorted(conn_keys_active)))
-        # Trigger alerts if this persists
-        logger.info("Connections connecting: %s", len(conn_connecting))
-        if error:
-            # Trigger alerts on this
-            logger.error("VPN Error Detected")
-        else:
+        if missing_conf_conns:
+            is_ok = False
+
+        if is_ok:
             logger.info("No VPN Errors Detected")
+            logger.info("Everything is ok.")
+        else:
+            logger.error("VPN Error Detected")
+            logger.error("Everything is NOT ok")
 
 
 def main():
