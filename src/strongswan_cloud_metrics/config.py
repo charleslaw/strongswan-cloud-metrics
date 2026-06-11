@@ -17,15 +17,17 @@ IGNORE_CHILD_SA_SUFFIXES = [
     ).split(",")
     if c.strip()
 ]
-# Set STRONGSWAN_REINIT=1 to automatically attempt
+# Set STRONGSWAN_CHILD_SA_REINIT=1 to automatically attempt
 # swanctl --initiate on missing child SAs.
 # Script must run as root (required for VICI access) so sudo is not needed.
-REINIT = os.environ.get("STRONGSWAN_REINIT", "0") == "1"
-REINIT_TIMEOUT = int(os.environ.get("STRONGSWAN_REINIT_TIMEOUT", "10"))
-# UTC time window during which reinitiation is allowed, e.g. "07:00-08:00".
-REINIT_WINDOW = os.environ.get("STRONGSWAN_REINIT_WINDOW", "")
+CHILD_SA_REINIT = os.environ.get("STRONGSWAN_CHILD_SA_REINIT", "0") == "1"
+CHILD_SA_REINIT_TIMEOUT = int(os.environ.get("STRONGSWAN_CHILD_SA_REINIT_TIMEOUT", "10"))
 # Minimum seconds between reinitiation attempts for the same child SA.
-REINIT_COOLDOWN = int(os.environ.get("STRONGSWAN_REINIT_COOLDOWN", "0"))
+CHILD_SA_REINIT_COOLDOWN = int(os.environ.get("STRONGSWAN_CHILD_SA_REINIT_COOLDOWN", "0"))
+# UTC time window during which service reinitiation is allowed, e.g. "07:00-08:00".
+SERVICE_REINIT_WINDOW = os.environ.get("STRONGSWAN_SERVICE_REINIT_WINDOW", "")
+# Minimum seconds between service restarts.
+SERVICE_REINIT_COOLDOWN = int(os.environ.get("STRONGSWAN_SERVICE_REINIT_COOLDOWN", "0"))
 
 # systemd sets STATE_DIRECTORY to the full path when StateDirectory= is configured.
 STATE_DIR = os.environ.get(

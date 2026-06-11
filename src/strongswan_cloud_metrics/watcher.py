@@ -96,6 +96,7 @@ def check():
                     except Exception:
                         pass
 
+    # Note that tunnels are child SA's
     for ike_key, child_sa, ignored in result["missing_tunnels"]:
         logger.error(
             "Missing tunnel: %s %s%s",
@@ -103,41 +104,61 @@ def check():
             child_sa,
             " (ignored)" if ignored else "",
         )
-        if config.REINIT and not ignored:
-            if not in_reinit_window(config.REINIT_WINDOW):
+        if config.CHILD_SA_REINIT and not ignored:
+            last_ts = db.last_reinit_ts(child_sa)
+            if not cooldown_elapsed(last_ts, config.CHILD_SA_REINIT_COOLDOWN):
+                remaining = config.CHILD_SA_REINIT_COOLDOWN - (time.time() - last_ts)
                 logger.info(
-                    "Reinit skipped (outside window %s): %s",
-                    config.REINIT_WINDOW,
+                    "Reinit skipped (cooldown, %.0fs remaining): %s",
+                    remaining,
                     child_sa,
                 )
             else:
-                last_ts = db.last_reinit_ts(child_sa)
-                if not cooldown_elapsed(last_ts, config.REINIT_COOLDOWN):
-                    remaining = config.REINIT_COOLDOWN - (time.time() - last_ts)
-                    logger.info(
-                        "Reinit skipped (cooldown, %.0fs remaining): %s",
-                        remaining,
-                        child_sa,
+                logger.info("Attempting to reinitiate child SA: %s", child_sa)
+                try:
+                    subprocess.run(
+                        ["swanctl", "--initiate", "--child", child_sa],
+                        timeout=config.CHILD_SA_REINIT_TIMEOUT,
+                        capture_output=True,
+                        check=False,
                     )
-                else:
-                    logger.info("Attempting to reinitiate child SA: %s", child_sa)
-                    try:
-                        subprocess.run(
-                            ["swanctl", "--initiate", "--child", child_sa],
-                            timeout=config.REINIT_TIMEOUT,
-                            capture_output=True,
-                            check=False,
-                        )
-                        db.record_reinit(ike_key, child_sa)
-                    except Exception as exc:
-                        logger.error("Reinitiate failed for %s: %s", child_sa, exc)
+                    db.record_reinit(ike_key, child_sa)
+                except Exception as exc:
+                    logger.error("Reinitiate failed for %s: %s", child_sa, exc)
 
     if result["is_ok"]:
         logger.info("No VPN Errors Detected")
+        # TODO: Remove this line
         logger.info("Everything is ok.")
     else:
         logger.error("VPN Error Detected")
+        # TODO: Remove this line
         logger.error("Everything is NOT ok")
+        if not in_reinit_window(config.SERVICE_REINIT_WINDOW):
+            logger.info(
+                "Service restart skipped (outside window %s)",
+                config.SERVICE_REINIT_WINDOW,
+            )
+        else:
+            last_ts = db.last_service_restart_ts()
+            if not cooldown_elapsed(last_ts, config.SERVICE_REINIT_COOLDOWN):
+                remaining = config.SERVICE_REINIT_COOLDOWN - (time.time() - last_ts)
+                logger.info(
+                    "Service restart skipped (cooldown, %.0fs remaining)",
+                    remaining,
+                )
+            else:
+                logger.info("Attempting service restart: systemctl restart strongswan")
+                try:
+                    subprocess.run(
+                        ["systemctl", "restart", "strongswan"],
+                        timeout=30,
+                        capture_output=True,
+                        check=False,
+                    )
+                    db.record_service_restart()
+                except Exception as exc:
+                    logger.error("Service restart failed: %s", exc)
 
 
 def main():

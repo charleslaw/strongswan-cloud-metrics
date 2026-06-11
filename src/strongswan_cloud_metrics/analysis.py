@@ -45,7 +45,7 @@ def in_reinit_window(window_str, now=None):
         return now >= start or now <= end
     except Exception:
         logger.error(
-            "Invalid STRONGSWAN_REINIT_WINDOW format: %s (expected HH:MM-HH:MM)",
+            "Invalid STRONGSWAN_SERVICE_REINIT_WINDOW format: %s (expected HH:MM-HH:MM)",
             window_str,
         )
         return False

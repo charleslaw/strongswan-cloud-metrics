@@ -53,21 +53,25 @@ STRONGSWAN_IGNORE=vpntest
 STRONGSWAN_IGNORE_CHILD_SA_SUFFIXES=-path-monitor
 
 # Set to 1 to automatically reinitiate missing child SAs via swanctl
-STRONGSWAN_REINIT=0
+STRONGSWAN_CHILD_SA_REINIT=0
 
 # Timeout in seconds for swanctl reinitiate calls
-STRONGSWAN_REINIT_TIMEOUT=10
-
-# UTC time window during which automatic reinitiation is allowed (HH:MM-HH:MM)
-# Leave unset to allow reinitiation at any time
-STRONGSWAN_REINIT_WINDOW=07:00-08:00
+STRONGSWAN_CHILD_SA_REINIT_TIMEOUT=10
 
 # Minimum seconds between reinitiation attempts for the same child SA
 # Set to 0 to disable (reinitiate every cycle if the tunnel is down)
-STRONGSWAN_REINIT_COOLDOWN=3600
+STRONGSWAN_CHILD_SA_REINIT_COOLDOWN=3600
+
+# UTC time window during which automatic service restart is allowed (HH:MM-HH:MM)
+# Leave unset to allow restart at any time
+STRONGSWAN_SERVICE_REINIT_WINDOW=07:00-08:00
+
+# Minimum seconds between service restarts
+# Set to 0 to disable (restart every cycle if VPN errors are detected)
+STRONGSWAN_SERVICE_REINIT_COOLDOWN=3600
 ```
 
-**Tip: limiting restarts to once per day** — set `STRONGSWAN_REINIT_WINDOW` to a short daily window and `STRONGSWAN_REINIT_COOLDOWN` to a value larger than the window duration. For example, a window of `07:00-08:00` (3600 seconds wide) with a cooldown of `7200` seconds means at most one restart attempt per child SA per day, even if the daemon keeps seeing the tunnel as down.
+**Tip: limiting restarts to once per day** — set `STRONGSWAN_SERVICE_REINIT_WINDOW` to a short daily window and `STRONGSWAN_SERVICE_REINIT_COOLDOWN` to a value larger than the window duration. For example, a window of `07:00-08:00` (3600 seconds wide) with a cooldown of `7200` seconds means at most one service restart per day, even if the daemon keeps seeing VPN errors.
 
 After editing, restart the service to pick up changes:
 
