@@ -1,10 +1,10 @@
 import datetime
 
-from strongswan_cloud_metrics.watcher import (
-    _analyze,
-    _cooldown_elapsed,
-    _in_reinit_window,
+from strongswan_cloud_metrics.analysis import (
+    analyze as _analyze,
     bytes2human,
+    cooldown_elapsed as _cooldown_elapsed,
+    in_reinit_window as _in_reinit_window,
 )
 
 
@@ -19,7 +19,7 @@ def ike(state=b"ESTABLISHED", children=None):
 def test_all_ok():
     conf = {"healthie": ["healthie-child"]}
     sas = [{"healthie": ike(children={"1": sa("healthie-child")})}]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is True
     assert result["missing_tunnels"] == []
 
@@ -27,7 +27,7 @@ def test_all_ok():
 def test_missing_ike_connection():
     conf = {"healthie": ["healthie-child"], "missing-conn": ["missing-child"]}
     sas = [{"healthie": ike(children={"1": sa("healthie-child")})}]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is False
     assert "missing-conn" in result["errored_conns"]
 
@@ -35,7 +35,7 @@ def test_missing_ike_connection():
 def test_missing_child_sa():
     conf = {"healthie": ["healthie-child"]}
     sas = [{"healthie": ike(children={})}]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is False
     assert ("healthie", "healthie-child", False) in result["missing_tunnels"]
 
@@ -43,7 +43,7 @@ def test_missing_child_sa():
 def test_child_sa_not_installed():
     conf = {"healthie": ["healthie-child"]}
     sas = [{"healthie": ike(children={"1": sa("healthie-child", state=b"REKEYING")})}]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is False
     assert ("healthie", "healthie-child", False) in result["missing_tunnels"]
 
@@ -51,7 +51,7 @@ def test_child_sa_not_installed():
 def test_ignored_ike_missing():
     conf = {"vpntest": ["vpntest-child"]}
     sas = []
-    result = _analyze(conf, sas, ignore=["vpntest"])
+    result = _analyze(conf, sas, ignore=["vpntest"], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is True
     assert result["errored_conns"] == set()
 
@@ -59,7 +59,7 @@ def test_ignored_ike_missing():
 def test_ignored_child_sa_missing():
     conf = {"vpntest": ["vpntest-child"]}
     sas = [{"vpntest": ike(children={})}]
-    result = _analyze(conf, sas, ignore=["vpntest"])
+    result = _analyze(conf, sas, ignore=["vpntest"], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is True
     assert result["missing_tunnels"] == [("vpntest", "vpntest-child", True)]
 
@@ -67,7 +67,7 @@ def test_ignored_child_sa_missing():
 def test_path_monitor_skipped():
     conf = {"healthie": ["healthie-child", "healthie-path-monitor"]}
     sas = [{"healthie": ike(children={"1": sa("healthie-child")})}]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=["-path-monitor"])
     assert result["is_ok"] is True
     assert result["missing_tunnels"] == []
 
@@ -79,7 +79,7 @@ def test_stuck_connection_ok():
         {"healthie": ike(children={"1": sa("healthie-child")})},
         {"healthie": ike(state=b"CONNECTING", children={})},
     ]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is True
 
 
@@ -87,7 +87,7 @@ def test_ike_not_established_does_not_mark_children():
     # IKE in CONNECTING state — child SAs should not count toward established.
     conf = {"healthie": ["healthie-child"]}
     sas = [{"healthie": ike(state=b"CONNECTING", children={"1": sa("healthie-child")})}]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is False
 
 
@@ -97,7 +97,7 @@ def test_multiple_connections_all_ok():
         {"healthie": ike(children={"1": sa("healthie-child")})},
         {"norwayhealth": ike(children={"1": sa("norwayhealth-child")})},
     ]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is True
     assert len(result["possible_conns"]) == 2
     assert len(result["active_conf_conns"]) == 2
@@ -125,7 +125,7 @@ def test_duplicate_ike_one_copy_fully_up():
             )
         },
     ]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is True
     assert result["missing_tunnels"] == []
 
@@ -152,7 +152,7 @@ def test_duplicate_ike_one_child_sa_down_everywhere():
             )
         },
     ]
-    result = _analyze(conf, sas, ignore=[])
+    result = _analyze(conf, sas, ignore=[], ignore_child_sa_suffixes=[])
     assert result["is_ok"] is False
     assert ("john", "john-stg", False) in result["missing_tunnels"]
     assert not any(t[1] == "john-prod" for t in result["missing_tunnels"])

@@ -13,7 +13,10 @@ An active intervention mode is also planned — the daemon will detect problems 
 ```
 src/strongswan_cloud_metrics/
     __init__.py
-    watcher.py          # main daemon loop + check() logic
+    config.py       # all env var constants (IGNORE, REINIT_*, STATE_DIR, etc.)
+    db.py           # SQLite helpers (init_db, last_reinit_ts, record_reinit)
+    analysis.py     # pure functions: analyze(), in_reinit_window(), cooldown_elapsed(), bytes2human()
+    watcher.py      # daemon entry point: check(), main(), logging setup
 strongswan-cloud-metrics.service   # systemd unit
 pyproject.toml
 ```
