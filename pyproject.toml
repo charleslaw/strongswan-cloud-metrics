@@ -11,8 +11,23 @@ dependencies = [
     "vici==5.9.11.post1",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+]
+
 [project.scripts]
 strongswan-cloud-metrics = "strongswan_cloud_metrics.watcher:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/strongswan_cloud_metrics"]
+
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
