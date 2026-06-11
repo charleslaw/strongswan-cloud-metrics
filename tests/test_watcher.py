@@ -1,4 +1,11 @@
-from strongswan_cloud_metrics.watcher import _analyze, bytes2human
+import datetime
+
+from strongswan_cloud_metrics.watcher import (
+    _analyze,
+    _cooldown_elapsed,
+    _in_reinit_window,
+    bytes2human,
+)
 
 
 def sa(name, state=b"INSTALLED"):
@@ -149,6 +156,85 @@ def test_duplicate_ike_one_child_sa_down_everywhere():
     assert result["is_ok"] is False
     assert ("john", "john-stg", False) in result["missing_tunnels"]
     assert not any(t[1] == "john-prod" for t in result["missing_tunnels"])
+
+
+# ---------------------------------------------------------------------------
+# _in_reinit_window tests
+# ---------------------------------------------------------------------------
+
+
+def t(h, m):
+    return datetime.time(h, m)
+
+
+def test_window_empty_always_allowed():
+    assert _in_reinit_window("", now=t(3, 0)) is True
+
+
+def test_window_inside():
+    assert _in_reinit_window("07:00-08:00", now=t(7, 30)) is True
+
+
+def test_window_at_start_boundary():
+    assert _in_reinit_window("07:00-08:00", now=t(7, 0)) is True
+
+
+def test_window_at_end_boundary():
+    assert _in_reinit_window("07:00-08:00", now=t(8, 0)) is True
+
+
+def test_window_before():
+    assert _in_reinit_window("07:00-08:00", now=t(6, 59)) is False
+
+
+def test_window_after():
+    assert _in_reinit_window("07:00-08:00", now=t(8, 1)) is False
+
+
+def test_window_crosses_midnight_inside_before():
+    assert _in_reinit_window("23:00-01:00", now=t(23, 30)) is True
+
+
+def test_window_crosses_midnight_inside_after():
+    assert _in_reinit_window("23:00-01:00", now=t(0, 30)) is True
+
+
+def test_window_crosses_midnight_outside():
+    assert _in_reinit_window("23:00-01:00", now=t(12, 0)) is False
+
+
+def test_window_invalid_format():
+    assert _in_reinit_window("notawindow", now=t(7, 0)) is False
+
+
+# ---------------------------------------------------------------------------
+# _cooldown_elapsed tests
+# ---------------------------------------------------------------------------
+
+
+def test_cooldown_zero_always_elapsed():
+    assert _cooldown_elapsed(last_ts=0, cooldown_secs=0, now=1000) is True
+
+
+def test_cooldown_no_last_ts():
+    assert _cooldown_elapsed(last_ts=None, cooldown_secs=3600, now=1000) is True
+
+
+def test_cooldown_not_yet_elapsed():
+    assert _cooldown_elapsed(last_ts=1000, cooldown_secs=3600, now=2000) is False
+
+
+def test_cooldown_exactly_elapsed():
+    assert _cooldown_elapsed(last_ts=1000, cooldown_secs=3600, now=4600) is True
+
+
+def test_cooldown_well_past():
+    assert _cooldown_elapsed(last_ts=1000, cooldown_secs=3600, now=100000) is True
+
+
+# ---------------------------------------------------------------------------
+# bytes2human tests
+# ---------------------------------------------------------------------------
 
 
 def test_bytes2human():

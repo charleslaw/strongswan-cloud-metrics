@@ -1,6 +1,8 @@
+import datetime
 import logging
 import os
 import socket
+import sqlite3
 import subprocess
 import time
 
@@ -44,10 +46,21 @@ IGNORE_CHILD_SA_SUFFIXES = [
     ).split(",")
     if c.strip()
 ]
-# Set REINIT=True to automatically attempt swanctl --initiate on missing child SAs.
+# Set STRONGSWAN_REINIT=1 to automatically attempt
+# swanctl --initiate on missing child SAs.
 # Script must run as root (required for VICI access) so sudo is not needed.
 REINIT = os.environ.get("STRONGSWAN_REINIT", "0") == "1"
 REINIT_TIMEOUT = int(os.environ.get("STRONGSWAN_REINIT_TIMEOUT", "10"))
+# UTC time window during which reinitiation is allowed, e.g. "07:00-08:00".
+REINIT_WINDOW = os.environ.get("STRONGSWAN_REINIT_WINDOW", "")
+# Minimum seconds between reinitiation attempts for the same child SA.
+REINIT_COOLDOWN = int(os.environ.get("STRONGSWAN_REINIT_COOLDOWN", "0"))
+
+# systemd sets STATE_DIRECTORY to the full path when StateDirectory= is configured.
+STATE_DIR = os.environ.get(
+    "STATE_DIRECTORY", "/var/lib/strongswan-cloud-metrics"
+).split()[0]
+DB_PATH = os.path.join(STATE_DIR, "state.db")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -55,6 +68,100 @@ ch = logging.StreamHandler()
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 ch.setFormatter(formatter)
 logger.addHandler(ch)
+
+
+# ---------------------------------------------------------------------------
+# SQLite helpers
+# ---------------------------------------------------------------------------
+
+
+def _init_db():
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS interventions (
+                id       INTEGER PRIMARY KEY,
+                ts       REAL    NOT NULL,
+                ike_key  TEXT    NOT NULL,
+                child_sa TEXT    NOT NULL,
+                action   TEXT    NOT NULL DEFAULT 'initiate',
+                outcome  TEXT
+            )
+        """)
+
+
+def _last_reinit_ts(child_sa):
+    """Returns unix timestamp of the most recent reinit for child_sa, or None."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT ts FROM interventions WHERE child_sa = ? "
+                "ORDER BY ts DESC LIMIT 1",
+                (child_sa,),
+            ).fetchone()
+        return row[0] if row else None
+    except Exception as exc:
+        logger.error("DB read failed: %s", exc)
+        return None
+
+
+def _record_reinit(ike_key, child_sa):
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                "INSERT INTO interventions (ts, ike_key, child_sa) VALUES (?, ?, ?)",
+                (time.time(), ike_key, child_sa),
+            )
+    except Exception as exc:
+        logger.error("DB write failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Reinit scheduling helpers (pure — no I/O, testable)
+# ---------------------------------------------------------------------------
+
+
+def _in_reinit_window(window_str, now=None):
+    """Returns True if now (UTC) falls within window_str (HH:MM-HH:MM).
+
+    Returns True when window_str is empty (no restriction).
+    Handles windows that cross midnight, e.g. "23:00-01:00".
+    """
+    if not window_str:
+        return True
+    if now is None:
+        now = datetime.datetime.utcnow().time()
+    try:
+        start_str, end_str = window_str.split("-", 1)
+        start = datetime.datetime.strptime(start_str.strip(), "%H:%M").time()
+        end = datetime.datetime.strptime(end_str.strip(), "%H:%M").time()
+        if start <= end:
+            return start <= now <= end
+        # Window crosses midnight
+        return now >= start or now <= end
+    except Exception:
+        logger.error(
+            "Invalid STRONGSWAN_REINIT_WINDOW format: %s (expected HH:MM-HH:MM)",
+            window_str,
+        )
+        return False
+
+
+def _cooldown_elapsed(last_ts, cooldown_secs, now=None):
+    """Returns True if at least cooldown_secs have passed since last_ts.
+
+    Returns True when cooldown_secs <= 0 (no restriction) or last_ts is None.
+    """
+    if cooldown_secs <= 0 or last_ts is None:
+        return True
+    if now is None:
+        now = time.time()
+    return (now - last_ts) >= cooldown_secs
+
+
+# ---------------------------------------------------------------------------
+# Core analysis (pure — no I/O, testable)
+# ---------------------------------------------------------------------------
 
 
 def _analyze(conf_ike_map, list_sas, ignore):
@@ -69,7 +176,6 @@ def _analyze(conf_ike_map, list_sas, ignore):
         is_ok, possible_conns, active_conns, active_conf_conns,
         missing_conf_conns, errored_conns, missing_tunnels
     """
-    # IKE key -> list of installed child SA names
     active_ike_map = {}
     for ike_blob in list_sas:
         for ike_key, ike_status in ike_blob.items():
@@ -139,6 +245,11 @@ def _analyze(conf_ike_map, list_sas, ignore):
     }
 
 
+# ---------------------------------------------------------------------------
+# Main check loop
+# ---------------------------------------------------------------------------
+
+
 def check():
     with socket.socket(socket.AF_UNIX) as s:
         try:
@@ -149,7 +260,6 @@ def check():
 
         session = vici.Session(s)
 
-        # IKE key -> list of expected child SA names (from config)
         conf_ike_map = {}
         for ike_cfg in session.list_conns():
             for ike_key in ike_cfg:
@@ -183,7 +293,6 @@ def check():
             if ike_status["state"] != b"ESTABLISHED":
                 continue
             try:
-                # v5.7 uses reauth-time instead of rekey-time
                 if "rekey-time" not in ike_status and "reauth-time" in ike_status:
                     ike_status["rekey-time"] = ike_status["reauth-time"]
                 logger.debug(
@@ -219,16 +328,31 @@ def check():
             " (ignored)" if ignored else "",
         )
         if REINIT and not ignored:
-            logger.info("Attempting to reinitiate child SA: %s", child_sa)
-            try:
-                subprocess.run(
-                    ["swanctl", "--initiate", "--child", child_sa],
-                    timeout=REINIT_TIMEOUT,
-                    capture_output=True,
-                    check=False,
+            if not _in_reinit_window(REINIT_WINDOW):
+                logger.info(
+                    "Reinit skipped (outside window %s): %s", REINIT_WINDOW, child_sa
                 )
-            except Exception as exc:
-                logger.error("Reinitiate failed for %s: %s", child_sa, exc)
+            else:
+                last_ts = _last_reinit_ts(child_sa)
+                if not _cooldown_elapsed(last_ts, REINIT_COOLDOWN):
+                    remaining = REINIT_COOLDOWN - (time.time() - last_ts)
+                    logger.info(
+                        "Reinit skipped (cooldown, %.0fs remaining): %s",
+                        remaining,
+                        child_sa,
+                    )
+                else:
+                    logger.info("Attempting to reinitiate child SA: %s", child_sa)
+                    try:
+                        subprocess.run(
+                            ["swanctl", "--initiate", "--child", child_sa],
+                            timeout=REINIT_TIMEOUT,
+                            capture_output=True,
+                            check=False,
+                        )
+                        _record_reinit(ike_key, child_sa)
+                    except Exception as exc:
+                        logger.error("Reinitiate failed for %s: %s", child_sa, exc)
 
     if result["is_ok"]:
         logger.info("No VPN Errors Detected")
@@ -239,6 +363,7 @@ def check():
 
 
 def main():
+    _init_db()
     while True:
         try:
             check()
